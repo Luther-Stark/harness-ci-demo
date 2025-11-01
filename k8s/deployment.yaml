@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: harness-ci-demo
+  labels:
+    app: harness-ci-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: harness-ci-demo
+  template:
+    metadata:
+      labels:
+        app: harness-ci-demo
+    spec:
+      containers:
+        - name: app
+          image: lutherstark/harness-ci-demo:latest
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
