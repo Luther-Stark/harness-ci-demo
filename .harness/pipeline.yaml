@@ -1,14 +1,13 @@
 pipeline:
   name: python-ci-demo
   identifier: python_ci_demo
-  orgIdentifier: default
   projectIdentifier: PythonCIDemo
+  orgIdentifier: default
   properties:
     ci:
       codebase:
-        connectorRef: github_ci_demo_connector   # e.g. github_conn
-        build: <+input>                           # choose branch at run time
-
+        connectorRef: github_ci_demo_connector
+        build: <+input>
   stages:
     - stage:
         name: Build_Test_Push
@@ -16,38 +15,41 @@ pipeline:
         type: CI
         spec:
           cloneCodebase: true
-
-          # >>> Harness Cloud (Hosted) infrastructure <<<
-          infrastructure:
-            type: Hosted
-            spec:
-              platform:
-                os: Linux
-                arch: Amd64
-              runtime:
-                type: Cloud
-
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
           execution:
             steps:
-              - run:
-                  name: Install_And_Test
-                  identifier: Install_And_Test
-                  shell: Sh
-                  command: |
-                    python -m venv venv
-                    . venv/bin/activate
-                    pip install -U pip
-                    pip install -r requirements.txt
-                    pytest -q
-
-              - buildAndPushDockerRegistry:
-                  name: Build_And_Push_Docker_Image
-                  identifier: Build_And_Push_Docker_Image
+              - step:
+                  type: Run
+                  name: Install and Test
+                  identifier: Install_Test
                   spec:
-                    connectorRef: Docker-Token-CI   # e.g. dockerhub_conn
-                    repo: jcontin03/harness-ci-demo     # e.g. youruser/harness-ci-demo
+                    shell: Sh
+                    command: |
+                      python -m venv venv
+                      . venv/bin/activate
+                      pip install -U pip
+                      pip install -r requirements.txt
+                      pytest -q
+              - step:
+                  type: BuildAndPushDockerRegistry
+                  name: Build and Push Docker Image
+                  identifier: Build_Push
+                  spec:
+                    connectorRef: Docker-Token-CI
+                    repo: jcontin03/harness-ci-demo
                     tags:
                       - latest
                       - <+pipeline.sequenceId>
                     dockerfile: Dockerfile
                     context: .
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: MarkAsFailure
