@@ -1,65 +1,65 @@
 pipeline:
-  name: python-ci-demo                   # Friendly name of your pipeline
-  identifier: python_ci_demo             # Unique ID (used by Harness)
-  projectIdentifier: PythonCIDemo        # <-- Replace with your Harness Project ID
-  orgIdentifier: default                 # <-- Replace with your Organization ID
-  tags: {}                               # Optional metadata tags
+  name: python-ci-demo
+  identifier: python_ci_demo
+  orgIdentifier: default
+  projectIdentifier: PythonCIDemo
 
-  # Code repository setup
   properties:
     ci:
       codebase:
-        connectorRef: github_ci_demo_connector   # <-- Replace with your GitHub Connector name
-        build: <+input>                  # Harness lets you choose branch/tag at runtime
+        connectorRef: github_ci_demo_connector   # <- your Git connector
+        build: <+input>                          # pick branch at run time
 
-  # ---- Pipeline Stages ----
   stages:
     - stage:
-        name: Build_Test_Push            # Stage name visible in the UI
+        name: Build_Test_Push
         identifier: Build_Test_Push
-        type: CI                         # Continuous Integration stage type
+        type: CI
         spec:
-          cloneCodebase: true            # Harness will clone your Git repo automatically
-
-          # --- Cloud Build Environment ---
+          cloneCodebase: true
           infrastructure:
-            type: Hosted                 # Using Harness Cloud Build (no delegate needed)
+            type: Hosted
             spec:
               platform:
                 os: Linux
-                arch: Amd64              # 64-bit Linux runners
+                arch: Amd64
               runtime:
-                type: Cloud              # Harness-hosted environment, fully managed
-
-          # --- The CI Steps ---
+                type: Cloud
           execution:
             steps:
-              # 1️⃣ Install dependencies and run tests
-              - run:
-                  name: Install Test
+              - step:
+                  type: Run
+                  name: Install & Test
                   identifier: Install_Test
-                  shell: Sh
-                  command: |
-                    python -m venv venv
-                    . venv/bin/activate
-                    pip install -U pip
-                    pip install -r requirements.txt
-                    pytest -q
+                  spec:
+                    shell: Sh
+                    command: |
+                      python -m venv venv
+                      . venv/bin/activate
+                      pip install -U pip
+                      pip install -r requirements.txt
+                      pytest -q
 
-              # 2️⃣ Build and push Docker image to DockerHub
-              - buildAndPushDockerRegistry:
-                  name: Build and Push Docker Image
+              - step:
+                  type: BuildAndPushDockerRegistry
+                  name: Build & Push Docker Image
                   identifier: Build_Push
                   spec:
-                    connectorRef: Docker-Token-CI   # <-- Replace with your DockerHub connector
-                    repo: jcontin03/harness-ci-demo
+                    connectorRef: Docker-Token-CI            # <- your DockerHub connector
+                    repo: jcontin03/harness-ci-demo          # <- DockerHub repo (user/repo)
+                    dockerfile: Dockerfile
+                    context: .
                     tags:
                       - latest
-                      - <+pipeline.sequenceId>           # Auto-incremented run number
-                    dockerfile: Dockerfile                # Dockerfile path (root)
-                    context: .                            # Build context (current dir)
+                      - <+pipeline.sequenceId>
 
-          # --- Optional caching to speed up builds ---
           caching:
             enabled: true
             key: python-ci-demo-cache
+
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: MarkAsFailure
