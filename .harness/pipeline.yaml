@@ -1,7 +1,7 @@
 pipeline:
   name: python-ci-demo                   # Friendly name of your pipeline
   identifier: python_ci_demo             # Unique ID (used by Harness)
-  projectIdentifier: JuanPythonPipe      # <-- Replace with your Harness Project ID
+  projectIdentifier: PythonCIDemo        # <-- Replace with your Harness Project ID
   orgIdentifier: default                 # <-- Replace with your Organization ID
   tags: {}                               # Optional metadata tags
 
