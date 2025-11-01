@@ -3,12 +3,11 @@ pipeline:
   identifier: python_ci_demo
   orgIdentifier: default
   projectIdentifier: PythonCIDemo
-
   properties:
     ci:
       codebase:
-        connectorRef: github_ci_demo_connector   # <- your Git connector
-        build: <+input>                          # pick branch at run time
+        connectorRef: github_ci_demo_connector   # e.g. github_conn
+        build: <+input>                           # choose branch at run time
 
   stages:
     - stage:
@@ -17,6 +16,8 @@ pipeline:
         type: CI
         spec:
           cloneCodebase: true
+
+          # >>> Harness Cloud (Hosted) infrastructure <<<
           infrastructure:
             type: Hosted
             spec:
@@ -25,41 +26,28 @@ pipeline:
                 arch: Amd64
               runtime:
                 type: Cloud
+
           execution:
             steps:
-              - step:
-                  type: Run
-                  name: Install & Test
-                  identifier: Install_Test
-                  spec:
-                    shell: Sh
-                    command: |
-                      python -m venv venv
-                      . venv/bin/activate
-                      pip install -U pip
-                      pip install -r requirements.txt
-                      pytest -q
+              - run:
+                  name: Install_And_Test
+                  identifier: Install_And_Test
+                  shell: Sh
+                  command: |
+                    python -m venv venv
+                    . venv/bin/activate
+                    pip install -U pip
+                    pip install -r requirements.txt
+                    pytest -q
 
-              - step:
-                  type: BuildAndPushDockerRegistry
-                  name: Build & Push Docker Image
-                  identifier: Build_Push
+              - buildAndPushDockerRegistry:
+                  name: Build_And_Push_Docker_Image
+                  identifier: Build_And_Push_Docker_Image
                   spec:
-                    connectorRef: Docker-Token-CI            # <- your DockerHub connector
-                    repo: jcontin03/harness-ci-demo          # <- DockerHub repo (user/repo)
-                    dockerfile: Dockerfile
-                    context: .
+                    connectorRef: Docker-Token-CI   # e.g. dockerhub_conn
+                    repo: jcontin03/harness-ci-demo     # e.g. youruser/harness-ci-demo
                     tags:
                       - latest
                       - <+pipeline.sequenceId>
-
-          caching:
-            enabled: true
-            key: python-ci-demo-cache
-
-        failureStrategies:
-          - onFailure:
-              errors:
-                - AllErrors
-              action:
-                type: MarkAsFailure
+                    dockerfile: Dockerfile
+                    context: .
