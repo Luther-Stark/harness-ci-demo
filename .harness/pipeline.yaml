@@ -41,7 +41,7 @@ pipeline:
                   identifier: Build_Push
                   spec:
                     connectorRef: DockerTokenCI
-                    repo: jcontin03/harness-ci-demo
+                    repo: lutherstark/harness-ci-demo
                     tags:
                       - latest
                       - <+pipeline.sequenceId>
