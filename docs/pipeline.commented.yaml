@@ -1,0 +1,184 @@
+# -----------------------------------------------------------------------------
+# Harness Pipeline: python-ci-demo (Fully Commented)
+# Purpose: Demonstrates end-to-end CI (test + build + push) and CD (K8s canary + rolling)
+# Notes:
+# - Replace connector/service/env identifiers with your org-specific values as needed.
+# - Comments (lines starting with '#') explain what each section does.
+# -----------------------------------------------------------------------------
+
+pipeline:
+  # Human-readable name shown in Harness UI
+  name: python-ci-demo
+  # Stable unique handle; used in expressions and APIs
+  identifier: python_ci_demo
+  # Scope: which project and org contain this pipeline
+  projectIdentifier: PythonCIDemo
+  orgIdentifier: default
+
+  properties:
+    ci:
+      codebase:
+        # SCM connector used for cloning the repo (GitHub/GitLab/Bitbucket)
+        connectorRef: github_ci_demo_connector
+        # Runtime input: pick a branch or PR when starting the run
+        build: <+input>
+
+  stages:
+    # =============================== CI STAGE ================================
+    - stage:
+        name: Build_Test_Push           # What you’ll call the stage in UI
+        identifier: Build_Test_Push     # Programmatic handle
+        type: CI
+        spec:
+          # cloneCodebase true = Harness automatically checks out code via the connectorRef above
+          cloneCodebase: true
+
+          # Platform and runner selection for CI (Harness Cloud runner here)
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+
+          execution:
+            steps:
+              # -------- Install & Test (fail fast before building images) --------
+              - step:
+                  type: Run
+                  name: Install and Test
+                  identifier: Install_Test
+                  spec:
+                    shell: Sh
+                    command: |
+                      # Create and activate a virtualenv to isolate dependencies
+                      python -m venv venv
+                      . venv/bin/activate
+
+                      # Upgrade pip and install runtime + test deps from requirements.txt
+                      pip install -U pip
+                      pip install -r requirements.txt
+
+                      # Run unit tests quietly; add --junitxml / --cov later if desired
+                      pytest -q
+
+              # -------- Build and push a container image to your registry --------
+              - step:
+                  type: BuildAndPushDockerRegistry
+                  name: Build and Push Docker Image
+                  identifier: Build_Push
+                  spec:
+                    # Registry credentials connector (e.g., Docker Hub, ECR, GCR)
+                    connectorRef: DockerTokenCI
+                    # Target repository in your registry
+                    repo: lutherstark/harness-ci-demo
+                    # Tag strategy: a moving 'latest' plus an immutable pipeline run number
+                    tags:
+                      - latest
+                      - <+pipeline.sequenceId>
+                    # Build context and Dockerfile path relative to repo root
+                    dockerfile: Dockerfile
+                    context: .
+
+          # Optional: stage-level failure strategies (defaults are OK)
+          failureStrategies:
+            - onFailure:
+                errors: [AllErrors]
+                action:
+                  type: StageRollback
+
+    # ============================== CD STAGE ==================================
+    - stage:
+        name: Deploy_to_K8s
+        identifier: Deploy_to_K8s
+        description: ""
+        type: Deployment
+        spec:
+          # Target workload type
+          deploymentType: Kubernetes
+
+          # ----- Service wiring -----
+          # 'pythoncidemo' is a Harness Service that carries your K8s manifests
+          # and references the container image as an artifact variable.
+          service:
+            serviceRef: pythoncidemo
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      # Prompt to choose WHICH image/artifact to deploy at runtime
+                      primaryArtifactRef: <+input>
+                      # If you have multiple artifact sources, you can choose among them at runtime
+                      sources: <+input>
+
+          # ----- Environment & Infrastructure -----
+          # 'demo' references a Harness Environment (e.g., Dev/QA/Prod) and
+          # 'demo_infra' references cluster/namespace credentials to reach your K8s cluster.
+          environment:
+            environmentRef: demo
+            infrastructureDefinitions:
+              - identifier: demo_infra
+
+          # ----- Execution (progressive delivery + rollback) -----
+          execution:
+            steps:
+              # Canary deploy a small slice first (e.g., 1 pod) to validate
+              - stepGroup:
+                  name: Canary Deployment
+                  identifier: canaryDeployment
+                  steps:
+                    - step:
+                        name: Canary Deployment
+                        identifier: canaryDeploymentStep
+                        type: K8sCanaryDeploy
+                        timeout: 10m
+                        spec:
+                          instanceSelection:
+                            type: Count
+                            spec:
+                              count: 1         # Canary size; adjust by Count/Percentage
+                          skipDryRun: false
+                    - step:
+                        name: Canary Delete
+                        identifier: canaryDelete
+                        type: K8sCanaryDelete
+                        timeout: 10m
+                        spec: {}
+
+              # If canary looks good, roll out the rest
+              - stepGroup:
+                  name: Primary Deployment
+                  identifier: primaryDeployment
+                  steps:
+                    - step:
+                        name: Rolling Deployment
+                        identifier: rollingDeployment
+                        type: K8sRollingDeploy
+                        timeout: 10m
+                        spec: {}
+
+            rollbackSteps:
+              # On failure, clean up the canary objects if they exist
+              - step:
+                  name: Canary Delete
+                  identifier: canaryDeleteRollback
+                  type: K8sCanaryDelete
+                  timeout: 10m
+                  spec: {}
+              # And then roll back the primary workload to the last good ReplicaSet
+              - step:
+                  name: Rolling Rollback
+                  identifier: rollingRollback
+                  type: K8sRollingRollback
+                  timeout: 10m
+                  spec: {}
+
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
