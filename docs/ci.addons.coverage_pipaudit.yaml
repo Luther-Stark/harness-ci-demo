@@ -1,0 +1,34 @@
+# -----------------------------------------------------------------------------
+# CI Add-ons (drop these steps into your CI stage's 'execution.steps' list)
+# - Enforce coverage >= 80%
+# - Run pip-audit and fail on vulnerabilities
+# Optional: publish JUnit/coverage XML for richer reporting (add storage step or annotations)
+# -----------------------------------------------------------------------------
+
+# --- Add after your 'Install and Test' step ---
+- step:
+    type: Run
+    name: Generate Coverage & Enforce Gate
+    identifier: Coverage_Gate
+    spec:
+      shell: Sh
+      command: |
+        . venv/bin/activate
+        # Re-run tests with coverage enabled (XML is handy for reports)
+        pip install coverage
+        pytest -q --cov=./ --cov-report=xml --cov-report=term
+        # Enforce a minimum threshold (adjust 80 as desired)
+        coverage report --fail-under=80
+
+# --- Software Composition Analysis (SCA) before building the image ---
+- step:
+    type: Run
+    name: Pip Audit (SCA)
+    identifier: Pip_Audit
+    spec:
+      shell: Sh
+      command: |
+        . venv/bin/activate
+        pip install pip-audit
+        # --strict returns non-zero exit on any vulnerability found
+        pip-audit --strict

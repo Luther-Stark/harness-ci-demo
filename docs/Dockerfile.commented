@@ -1,0 +1,48 @@
+# -----------------------------------------------------------------------------
+# Dockerfile (Fully Commented) for the FastAPI demo
+# Goals:
+#  - Keep images small (slim base)
+#  - Speed up builds via layer ordering (deps before source)
+#  - Run as non-root
+#  - Provide a healthcheck that hits /health
+# -----------------------------------------------------------------------------
+
+# Use a small, maintained Python base
+FROM python:3.10-slim AS runtime
+
+# Set environment to avoid writing .pyc and ensure unbuffered logs
+ENV PYTHONDONTWRITEBYTECODE=1     PYTHONUNBUFFERED=1
+
+# Create a non-root user for security (UID/GID 10001 is a common choice)
+RUN addgroup --system app && adduser --system --ingroup app --uid 10001 app
+
+# Set workdir
+WORKDIR /app
+
+# Install system deps (optional minimal build tooling; remove if not needed)
+# Using --no-install-recommends to keep the image small
+RUN apt-get update && apt-get install -y --no-install-recommends     curl ca-certificates  && rm -rf /var/lib/apt/lists/*
+
+# Copy dependency files separately to leverage Docker layer caching
+COPY requirements.txt /app/requirements.txt
+
+# Install only the runtime dependencies; avoid caching wheels inside the image
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the application source LAST to invalidate the fewest layers per change
+# If your entrypoint module is named differently, adjust the CMD below accordingly.
+COPY . /app
+
+# Expose the port your app listens on (matches K8s Service manifest)
+EXPOSE 8080
+
+# Optional: a simple healthcheck curling our /health endpoint
+# If curl is not desired, you can use python -c to do an HTTP GET instead
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3   CMD curl -fsS http://127.0.0.1:8080/health || exit 1
+
+# Drop privileges
+USER 10001
+
+# Use uvicorn to run the FastAPI app (module:file -> 'main:app')
+# Adjust workers as needed; keep 1 for light demo loads
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]

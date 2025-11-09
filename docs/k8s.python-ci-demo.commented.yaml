@@ -1,0 +1,77 @@
+# -----------------------------------------------------------------------------
+# Kubernetes Manifests (Fully Commented)
+# - Deployment uses the Harness artifact image variable: <+artifact.image>
+# - Probes hit /health on port 8080
+# - Security context runs as non-root
+# - Service exposes port 8080 (ClusterIP for demo)
+# -----------------------------------------------------------------------------
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # Name should match what your Harness Service/Manifests expect
+  name: python-ci-demo
+  # Namespace can be controlled by your Harness Environment/Infrastructure; omit or set explicitly
+  # namespace: demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: python-ci-demo
+  template:
+    metadata:
+      labels:
+        app: python-ci-demo
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+      containers:
+        - name: app
+          # Harness will substitute this with the selected artifact image at deploy time
+          image: "<+artifact.image>"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            # Add app env vars here (e.g., LOG_LEVEL)
+            - name: LOG_LEVEL
+              value: info
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: python-ci-demo
+spec:
+  type: ClusterIP
+  selector:
+    app: python-ci-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
