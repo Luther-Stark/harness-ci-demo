@@ -47,12 +47,18 @@ pipeline:
                       - <+pipeline.sequenceId>
                     dockerfile: Dockerfile
                     context: .
+          caching:
+            enabled: true
+            paths: []
+          buildIntelligence:
+            enabled: true
         failureStrategies:
           - onFailure:
               errors:
                 - AllErrors
               action:
                 type: MarkAsFailure
+        description: ""
     - stage:
         name: Deploy_to_K8s
         identifier: Deploy_to_K8s
